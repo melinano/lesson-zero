@@ -1,10 +1,18 @@
-package jetStream
+package main
 
-import "github.com/nats-io/nats.go"
+import (
+	"github.com/nats-io/nats.go"
+	"time"
+)
 
 func JetStreamInit() (nats.JetStreamContext, error) {
 	// Connect to NATS to default URL (nats://127.0.0.1:4222)
-	nc, err := nats.Connect(nats.DefaultURL)
+	opts := nats.Options{
+		Url:     nats.DefaultURL,
+		Timeout: 5 * time.Second,
+	}
+
+	nc, err := opts.Connect()
 	if err != nil {
 		return nil, err
 	}

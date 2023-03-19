@@ -1,4 +1,4 @@
-package jetStream
+package main
 
 import (
 	"github.com/nats-io/nats.go"
@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	StreamName     = "ORDERINGS"
-	StreamSubjects = "ORDERINGS.*"
+	StreamName     = "MESSAGES"
+	StreamSubjects = "MESSAGES.*"
 )
 
 func CreateStream(jetStream nats.JetStreamContext) error {

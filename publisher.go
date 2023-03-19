@@ -1,7 +1,8 @@
-package pub
+package main
 
 import (
 	"encoding/json"
+	"github.com/melinano/lesson-zero/models"
 	"github.com/nats-io/nats.go"
 	"io/ioutil"
 	"log"
@@ -9,12 +10,12 @@ import (
 	"time"
 )
 
-func getOrderings() ([]Ordering, error) {
+func getOrderings() ([]models.Ordering, error) {
 	rawOrderings, _ := ioutil.ReadFile("./model.json")
-	var orderingObj []Ordering
+	var orderingObj models.Ordering
 	err := json.Unmarshal(rawOrderings, &orderingObj)
 
-	return orderingObj, err
+	return []models.Ordering{orderingObj}, err
 }
 
 func publishOrderings(js nats.JetStreamContext) {
@@ -23,8 +24,10 @@ func publishOrderings(js nats.JetStreamContext) {
 		log.Println(err)
 		return
 	}
+	oneOrdering := orderings[0]
 
-	for _, oneOrdering := range orderings {
+	//for _, oneOrdering := range orderings {
+	for i := 0; i <= 30; i++ {
 
 		// create random message intervals to slow down
 		r := rand.Intn(1500)
@@ -41,7 +44,7 @@ func publishOrderings(js nats.JetStreamContext) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			log.Printf("Publisher => Message:%s\n", oneOrdering.Uid)
+			log.Printf("Publisher => Message:%s\n", oneOrdering.OrderUid)
 		}
 	}
 }
