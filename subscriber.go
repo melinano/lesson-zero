@@ -21,6 +21,8 @@ func subscribeOrderings(js nats.JetStreamContext) {
 			log.Fatal(err)
 		}
 
+		startDB(ordering)
+
 		log.Printf("Subscriber => Subject: %s - ID: %s", msg.Subject, ordering.OrderUid)
 	}, nats.Durable("MESSAGE"))
 

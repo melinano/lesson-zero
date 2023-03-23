@@ -12,10 +12,10 @@ import (
 
 func getOrderings() ([]models.Ordering, error) {
 	rawOrderings, _ := ioutil.ReadFile("./model.json")
-	var orderingObj models.Ordering
+	var orderingObj []models.Ordering
 	err := json.Unmarshal(rawOrderings, &orderingObj)
 
-	return []models.Ordering{orderingObj}, err
+	return orderingObj, err
 }
 
 func publishOrderings(js nats.JetStreamContext) {
@@ -24,10 +24,8 @@ func publishOrderings(js nats.JetStreamContext) {
 		log.Println(err)
 		return
 	}
-	oneOrdering := orderings[0]
 
-	//for _, oneOrdering := range orderings {
-	for i := 0; i <= 30; i++ {
+	for _, oneOrdering := range orderings {
 
 		// create random message intervals to slow down
 		r := rand.Intn(1500)
