@@ -8,7 +8,7 @@ import (
 
 // establish a http server on localhost and port 8080
 func startHTTPServer() {
-	http.HandleFunc("/orderings", getOrderingByIDHandler)
+	http.HandleFunc("/ordering", getOrderingByIDHandler)
 	fmt.Println("Server listening on port 8080")
 	http.ListenAndServe(":8080", nil)
 }

@@ -32,7 +32,7 @@ func publishOrderings(js nats.JetStreamContext) {
 		// create random message intervals to slow down
 		r := rand.Intn(1500)
 		time.Sleep(time.Duration(r) * time.Millisecond)
-
+		// convert to JSON
 		orderingString, err := json.Marshal(oneOrdering)
 		if err != nil {
 			log.Println(err)
