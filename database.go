@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
+	"github.com/jackc/pgx/v4/pgxpool"
 	_ "github.com/lib/pq"
 	"github.com/melinano/lesson-zero/models"
 	"log"
@@ -16,25 +18,25 @@ const (
 	dbname   = "ordering_db"
 )
 
-func startDB(ordering models.Ordering) {
+func startDB() *pgxpool.Pool {
 	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s "+
 		"dbname=%s sslmode=disable", host, port, user, password, dbname)
 
-	db, err := sql.Open("postgres", psqlconn)
+	pool, err := pgxpool.Connect(context.Background(), psqlconn)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
-	defer db.Close()
-	insertOrderingIntoDB(db, ordering)
+	return pool
 }
 
-func insertOrderingIntoDB(db *sql.DB, ordering models.Ordering) {
+func insertOrderingIntoDB(pool *pgxpool.Pool, ordering models.Ordering) error {
 
 	insertStatementOrdering := `INSERT INTO ordering (order_uid, track_number, 
                       entry, locale, internal_signature, customer_id, 
                       delivery_service, shardkey, sm_id, date_created,
                       oof_shard) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
-	err := db.QueryRow(
+	_, err := pool.Exec(
+		context.Background(),
 		insertStatementOrdering,
 		ordering.OrderUid,
 		ordering.TrackNumber,
@@ -46,22 +48,26 @@ func insertOrderingIntoDB(db *sql.DB, ordering models.Ordering) {
 		ordering.ShardKey,
 		ordering.SmId,
 		ordering.DateOfCreation,
-		ordering.OofShard).Err()
+		ordering.OofShard)
 	if err != nil {
-		log.Fatalf("Error while inserting ordering: %s", err)
-		return
+		log.Printf("Error while inserting ordering: %s", err)
+		return err
 	}
 
-	insertDeliveryIntoDB(db, ordering.OrderUid, ordering.Delivery)
-	insertPaymentIntoDB(db, ordering.OrderUid, ordering.Payment)
-	insertItemsIntoDB(db, ordering.OrderUid, ordering.Items)
+	if insertDeliveryIntoDB(pool, ordering.OrderUid, ordering.Delivery) != nil ||
+		insertPaymentIntoDB(pool, ordering.OrderUid, ordering.Payment) != nil ||
+		insertItemsIntoDB(pool, ordering.OrderUid, ordering.Items) != nil {
+		return err
+	}
+	return nil
 }
-func insertDeliveryIntoDB(db *sql.DB, orderingUid string, delivery models.Delivery) {
+func insertDeliveryIntoDB(pool *pgxpool.Pool, orderingUid string, delivery models.Delivery) error {
 
 	insertStatementDelivery := `INSERT INTO delivery (name, phone, zip, city, address, region,
                       email, ordering_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
-	err := db.QueryRow(
+	_, err := pool.Exec(
+		context.Background(),
 		insertStatementDelivery,
 		delivery.Name,
 		delivery.Phone,
@@ -70,19 +76,22 @@ func insertDeliveryIntoDB(db *sql.DB, orderingUid string, delivery models.Delive
 		delivery.Address,
 		delivery.Region,
 		delivery.Email,
-		orderingUid).Err()
+		orderingUid)
 	if err != nil {
-		log.Fatalf("Error while inserting delivery: %s", err)
+		log.Printf("Error while inserting delivery (phone: %s): %s \n Skipping record ordering(order_uid: %s)", delivery.Phone, err, orderingUid)
+		return err
 	}
+	return nil
 }
 
-func insertPaymentIntoDB(db *sql.DB, orderingUid string, payment models.Payment) {
+func insertPaymentIntoDB(pool *pgxpool.Pool, orderingUid string, payment models.Payment) error {
 
-	insertStatementDelivery := `INSERT INTO delivery (request_id, currency, provider, amount, payment_date, bank,
+	insertStatementPayment := `INSERT INTO payment (request_id, currency, provider, amount, payment_date, bank,
                       delivery_cost, goods_total, custom_fee, transaction) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
 
-	err := db.QueryRow(
-		insertStatementDelivery,
+	_, err := pool.Exec(
+		context.Background(),
+		insertStatementPayment,
 		payment.RequestId,
 		payment.Currency,
 		payment.Provider,
@@ -92,19 +101,22 @@ func insertPaymentIntoDB(db *sql.DB, orderingUid string, payment models.Payment)
 		payment.DeliveryCost,
 		payment.GoodsTotal,
 		payment.CustomFee,
-		orderingUid).Err()
+		orderingUid)
 	if err != nil {
-		log.Fatalf("Error while inserting payment: %s", err)
+		log.Printf("Error while inserting payment (request_id: %s): %s\nSkipping record ordering(order_uid: %s)", payment.RequestId, err, orderingUid)
+		return err
 	}
+	return nil
 }
 
-func insertItemsIntoDB(db *sql.DB, orderingUid string, items []models.Item) {
+func insertItemsIntoDB(pool *pgxpool.Pool, orderingUid string, items []models.Item) error {
 	for _, item := range items {
 		insertStatementItem := `INSERT INTO item (chrt_id, track_number, 
                       price, rid, name, sale, size, total_price, nm_id, 
                       brand, status, ordering_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 
-		err := db.QueryRow(
+		_, err := pool.Exec(
+			context.Background(),
 			insertStatementItem,
 			item.ChrtId,
 			item.TrackNumber,
@@ -117,11 +129,13 @@ func insertItemsIntoDB(db *sql.DB, orderingUid string, items []models.Item) {
 			item.NmId,
 			item.Brand,
 			item.Status,
-			orderingUid).Err()
+			orderingUid)
 		if err != nil {
-			log.Fatalf("Error while inserting item: %s", err)
+			log.Printf("Error while inserting item(chrt_id: %s): %s\nSkipping record ordering(%s)", item.ChrtId, err, orderingUid)
+			return err
 		}
 	}
+	return nil
 }
 
 func updateOrdering(db *sql.DB, ordering models.Ordering) {
@@ -155,7 +169,7 @@ func updateOrdering(db *sql.DB, ordering models.Ordering) {
 	id, err := result.RowsAffected()
 
 	if err != nil {
-		log.Fatalf("Error while updating ordering: %s\n %s", id, err)
+		log.Printf("Error while updating ordering: %s\n %s", id, err)
 	}
 }
 
@@ -183,7 +197,7 @@ func updateDelivery(db *sql.DB, orderingUid string, delivery models.Delivery) {
 	id, err := result.RowsAffected()
 
 	if err != nil {
-		log.Fatal("Error while updating delivery: %s\n %s", id, err)
+		log.Printf("Error while updating delivery: %s\n %s", id, err)
 	}
 }
 
@@ -215,7 +229,7 @@ func updatePayment(db *sql.DB, orderingUid string, payment models.Payment) {
 	id, err := result.RowsAffected()
 
 	if err != nil {
-		log.Fatal("Error while updating ordering: %s\n %s", id, err)
+		log.Printf("Error while updating ordering: %s\n %s", id, err)
 	}
 }
 
@@ -251,69 +265,101 @@ func updateItem(db *sql.DB, orderingUid string, item models.Item) {
 	id, err := result.RowsAffected()
 
 	if err != nil {
-		log.Fatal("Error while updating item: %s\n %s", id, err)
+		log.Printf("Error while updating item: %s\n %s", id, err)
 	}
 }
 
-func fetchOrderings(db *sql.DB) {
-	rows, err := db.Query("SELECT * FROM ordering")
+func fetchOrderings(pool *pgxpool.Pool, orderingsMap *map[string]models.Ordering) error {
+	// Sending SQL Query to database
+	rows, err := pool.Query(context.Background(), "SELECT * FROM ordering")
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
+	defer rows.Close()
+	// going through the rows of the Ordering table to get field values
 	for rows.Next() {
 		var ordering models.Ordering
 		if err := rows.Scan(&ordering.OrderUid, &ordering.TrackNumber, &ordering.Entry,
 			&ordering.Locale, &ordering.InternalSignature, &ordering.CustomerId, &ordering.DeliveryService,
 			&ordering.ShardKey, &ordering.SmId, &ordering.DateOfCreation, &ordering.OofShard); err != nil {
-			log.Fatal(err)
+			log.Print(err)
+			return err
+		} else {
+			// fetching the corresponding values for Delivery, Payment and Items
+			if err := fetchDelivery(pool, ordering.OrderUid, &ordering.Delivery); err != nil {
+				return err
+			} else if err = fetchPayment(pool, ordering.OrderUid, &ordering.Payment); err != nil {
+				return err
+			} else if err = fetchItems(pool, ordering.OrderUid, &ordering.Items); err != nil {
+				return err
+			}
+			// adding to the map
+			(*orderingsMap)[ordering.OrderUid] = ordering
 		}
 	}
+	return nil
 }
 
-func fetchDelivery(db *sql.DB, orderingUid string) models.Delivery {
-	rows, err := db.Query(`SELECT * FROM delivery WHERE ordering_id = $1 LIMIT 1`, orderingUid)
+func fetchDelivery(pool *pgxpool.Pool, orderingUid string, delivery *models.Delivery) error {
+	// Sending SQL Query to database
+	// There is only one Delivery in an Ordering
+	rows, err := pool.Query(context.Background(), `SELECT * FROM delivery WHERE ordering_id = $1 LIMIT 1`, orderingUid)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
-	var delivery models.Delivery
+	defer rows.Close()
+	// going through the rows of the Delivery table to get field values
 	for rows.Next() {
+		// we don't need orderingId from the DB, but we have to catch the value
+		var orderingId *string
 		if err := rows.Scan(&delivery.Name, &delivery.Phone, &delivery.Zip,
-			&delivery.City, &delivery.Address, &delivery.Region, &delivery.Email); err != nil {
-			log.Fatal(err)
+			&delivery.City, &delivery.Address, &delivery.Region, &delivery.Email, &orderingId); err != nil {
+			log.Print(err)
+			return err
 		}
 	}
-	return delivery
+	return nil
 }
 
-func fetchPayment(db *sql.DB, orderingUid string) models.Payment {
-	rows, err := db.Query(`SELECT * FROM payment WHERE transaction = $1 LIMIT 1`, orderingUid)
+func fetchPayment(pool *pgxpool.Pool, orderingUid string, payment *models.Payment) error {
+	// Sending SQL Query to database
+	// there is only one Payment in an Ordering
+	rows, err := pool.Query(context.Background(), `SELECT * FROM payment WHERE transaction = $1 LIMIT 1`, orderingUid)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
-	var payment models.Payment
+	defer rows.Close()
+	// going through the rows of the Payment table to get field values
 	for rows.Next() {
 		if err := rows.Scan(&payment.RequestId, &payment.Currency, &payment.Provider, &payment.Amount,
 			&payment.PaymentDate, &payment.Bank, &payment.DeliveryCost, &payment.GoodsTotal, &payment.CustomFee, &payment.Transaction); err != nil {
-			log.Fatal(err)
+			log.Print(err)
+			return err
 		}
 	}
-	return payment
+	return nil
 }
 
-func fetchItems(db *sql.DB, orderingUid string) []models.Item {
-	rows, err := db.Query(`SELECT * FROM item WHERE ordering_id = $1`, orderingUid)
+func fetchItems(pool *pgxpool.Pool, orderingUid string, items *[]models.Item) error {
+	// Sending SQL Query to database
+	rows, err := pool.Query(context.Background(), `SELECT * FROM item WHERE ordering_id = $1`, orderingUid)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
-	var items []models.Item
+	defer rows.Close()
+	// going through the rows of the Item table to get field values and appending them
+	// into a slice of items
 	for rows.Next() {
 		var item models.Item
+		// we don't need orderingId from the DB, but we have to catch the value
+		var ordering_id *string
 		if err := rows.Scan(&item.ChrtId, &item.TrackNumber, &item.Price, &item.Rid,
 			&item.Name, &item.Sale, &item.Size, &item.TotalPrice, &item.NmId, &item.Brand,
-			&item.Status); err != nil {
-			log.Fatal(err)
+			&item.Status, &ordering_id); err != nil {
+			log.Print(err)
+			return err
 		}
-		items = append(items, item)
+		*items = append(*items, item)
 	}
-	return items
+	return nil
 }

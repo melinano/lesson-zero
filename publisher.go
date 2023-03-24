@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var orderings []models.Ordering
+
 func getOrderings() ([]models.Ordering, error) {
 	rawOrderings, _ := ioutil.ReadFile("./model.json")
 	var orderingObj []models.Ordering
@@ -19,10 +21,10 @@ func getOrderings() ([]models.Ordering, error) {
 }
 
 func publishOrderings(js nats.JetStreamContext) {
-	orderings, err := getOrderings()
-	if err != nil {
-		log.Println(err)
-		return
+	// generate 100 random orderings
+
+	for i := 0; i < 20; i++ {
+		orderings = append(orderings, models.GenerateRandomOrdering())
 	}
 
 	for _, oneOrdering := range orderings {

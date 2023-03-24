@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"github.com/google/uuid"
 	"math/rand"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,11 +17,11 @@ var firstNames = []string{
 	"Yara", "Zachary"}
 
 var lastNames = []string{
-	" Adams", " Baker", " Clark", " Davis", " Saringer", " Evans", " Franklin",
-	" Gonzalez", " Harris", " Irwin", " Johnson", " Klein", " Lee", " Gieskanne",
-	" Miller", " Nelson", " O'Connor", " Patel", " Quinn", " Roberts", " Kanunnikov",
-	" Smith", " Thompson", " Upton", " Valdez", " Walker", " Xu",
-	" Young", " Zhang",
+	"Adams", "Baker", "Clark", "Davis", "Saringer", "Evans", "Franklin",
+	"Gonzalez", "Harris", "Irwin", "Johnson", "Klein", "Lee", "Gieskanne",
+	"Miller", "Nelson", "O'Connor", "Patel", "Quinn", "Roberts", "Kanunnikov",
+	"Smith", "Thompson", "Upton", "Valdez", "Walker", "Xu",
+	"Young", "Zhang",
 }
 
 // structs for JSON unmarshalling
@@ -29,7 +31,7 @@ type Ordering struct {
 	Entry             string    `json:"entry" validate:"max=40"`
 	Delivery          Delivery  `json:"delivery"`
 	Payment           Payment   `json:"payment"`
-	Items             []Item    `json:"deliverys"`
+	Items             []Item    `json:"items"`
 	Locale            string    `json:"locale" validate:"max=40"`
 	InternalSignature string    `json:"internal_signature" validate:"max=40"`
 	CustomerId        string    `json:"customer_id" validate:"max=40"`
@@ -114,7 +116,7 @@ func generateRandomItem(amount int) []Item {
 		item.Rid = "ab4219087a764ae0btest"
 		item.Name = "Mascaras"
 		item.Sale = rand.Intn(99)
-		item.Size = string(rand.Intn(20))
+		item.Size = "0"
 		item.TotalPrice = int(item.Price * ((100 - item.Sale) / 100))
 		item.NmId = rand.Intn(9999999)
 		item.Brand = "Vivienne Sabo"
@@ -132,18 +134,16 @@ func generateRandomDelivery() Delivery {
 	// compose random name
 	firstName := firstNames[rand.Intn(len(firstNames))]
 	lastName := lastNames[rand.Intn(len(lastNames))]
-	name := firstName + lastName
 
-	// generate random number with 10 digits
-	phoneNumber := 1000000000 + rand.Intn(10000000000-1000000000)
-
-	delivery.Name = name
-	delivery.Phone = "+" + string(phoneNumber)
+	delivery.Name = firstName + " " + lastName
+	// generate random number with 10 digits starting with "+"
+	time.Sleep(time.Duration(100) * time.Millisecond)
+	delivery.Phone = "+" + strconv.Itoa(rand.Intn(8999999999)+1000000000)
 	delivery.Zip = "2639809"
 	delivery.City = "Kiryat Mozkin"
 	delivery.Address = "Ploshad Mira 15"
 	delivery.Region = "Kraiot"
-	delivery.Email = "test@gmail.com"
+	delivery.Email = strings.ToLower(firstName + lastName + "@gmail.com")
 
 	return delivery
 }
@@ -165,7 +165,7 @@ func generateRandomPayment(orderingUid string) Payment {
 	return payment
 }
 
-func generateRandomOrdering() Ordering {
+func GenerateRandomOrdering() Ordering {
 	var ordering Ordering
 
 	ordering.OrderUid = uuid.New().String()
@@ -182,7 +182,8 @@ func generateRandomOrdering() Ordering {
 
 	ordering.Delivery = generateRandomDelivery()
 	ordering.Payment = generateRandomPayment(ordering.OrderUid)
-	ordering.Items = generateRandomItem(rand.Intn(10))
+	// at least 1 and at most 11 items
+	ordering.Items = generateRandomItem(rand.Intn(10) + 1)
 
 	return ordering
 }
